@@ -90,7 +90,7 @@ void publishNavVelNED(const ublox_msgs::NavVELNED& m) {
 
   // Example geometry message
   static ros::Publisher velocityPublisher =
-      nh->advertise<geometry_msgs::TwistWithCovarianceStamped>("fix_velocity",
+      nh->advertise<geometry_msgs::TwistWithCovarianceStamped>("velocity",
                                                                kROSQueueSize);
   if (m.iTOW == last_nav_pos.iTOW) {
     //  use same time as las navposllh message

@@ -6,7 +6,7 @@
     <arg name="output" default="screen"/>
 
     <!-- Read at 4Hz -->
-    <arg name="rate" default="10"/>
+    <arg name="rate" default="20"/>
 
     <!-- SBAS enabled -->
     <arg name="enable_sbas" default="true"/>
@@ -30,6 +30,9 @@
     <!-- Specify ublox version (6,7,8) -->
     <arg name="ublox_version" default="8"/>
 
+    <!-- Specify number of samples to init -->
+    <arg name="init_samples" default="50"/>
+
     <node name="$(arg gps)" pkg="ublox_gps" type="ublox_gps" output="$(arg output)">
         <param name="device" type="string" value="$(arg device)"/>
         <param name="frame_id" type="string" value="$(arg frame_id)"/>
@@ -43,5 +46,6 @@
         <param name="enable_glonass" type="bool" value="$(arg enable_glonass)"/>
         <param name="enable_ppp" type="bool" value="$(arg enable_ppp)"/>
         <param name="ublox_version" type="int" value="$(arg ublox_version)"/>
+        <param name="initializing_samples" type="int" value="$(arg init_samples)"/>
     </node>
 </launch>

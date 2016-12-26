@@ -33,6 +33,8 @@
 
 #include <boost/regex.hpp>
 
+#include <cmath>
+#include <iostream>
 #include <ros/ros.h>
 #include <ros/serialization.h>
 #include <ublox_msgs/CfgGNSS.h>
@@ -42,6 +44,7 @@
 #include <ublox_msgs/NavVELNED.h>
 #include <ublox_msgs/ublox_msgs.h>
 
+#include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 #include <sensor_msgs/NavSatFix.h>
@@ -53,6 +56,23 @@ const static uint32_t kROSQueueSize = 1;
 
 using namespace ublox_gps;
 
+void publishNavStatus(const ublox_msgs::NavSTATUS& m);
+void publishNavSOL(const ublox_msgs::NavSOL& m);
+void publishNavVelNED(const ublox_msgs::NavVELNED& m);
+void publishNavPosLLH(const ublox_msgs::NavPOSLLH& m);
+void publishNavPosTransform(const ublox_msgs::NavPOSLLH& m);
+void publishNavSVINFO(const ublox_msgs::NavSVINFO& m);
+void publishNavCLK(const ublox_msgs::NavCLOCK& m);
+void publishRxmRAW(const ublox_msgs::RxmRAW& m);
+void publishRxmSFRB(const ublox_msgs::RxmSFRB& m);
+void publishRxmALM(const ublox_msgs::RxmALM& m);
+void publishRxmEPH(const ublox_msgs::RxmEPH& m);
+void publishAidALM(const ublox_msgs::AidALM& m);
+void publishAidEPH(const ublox_msgs::AidEPH& m);
+void publishAidHUI(const ublox_msgs::AidHUI& m);
+void pollMessages(const ros::TimerEvent& event);
+void fix_diagnostic(diagnostic_updater::DiagnosticStatusWrapper& stat);
+
 boost::shared_ptr<ros::NodeHandle> nh;
 boost::shared_ptr<diagnostic_updater::Updater> updater;
 boost::shared_ptr<diagnostic_updater::TopicDiagnostic> freq_diag;
@@ -61,18 +81,21 @@ ublox_msgs::NavSTATUS status;
 std::map<std::string, bool> enabled;
 std::string frame_id;
 int num_svs_used = 0;
+int initializing_samples;
+int sample_counter = 0;
+double x_0; double y_0; double z_0;
 
 ublox_msgs::NavPOSLLH last_nav_pos;
 ublox_msgs::NavVELNED last_nav_vel;
 
 sensor_msgs::NavSatFix fix;
+geometry_msgs::TransformStamped fix_transform;
 geometry_msgs::TwistWithCovarianceStamped velocity;
 
 void publishNavStatus(const ublox_msgs::NavSTATUS& m) {
   static ros::Publisher publisher =
       nh->advertise<ublox_msgs::NavSTATUS>("navstatus", kROSQueueSize);
   publisher.publish(m);
-
   status = m;
 }
 
@@ -100,20 +123,16 @@ void publishNavVelNED(const ublox_msgs::NavVELNED& m) {
     velocity.header.stamp = ros::Time::now();
   }
   velocity.header.frame_id = frame_id;
-
   //  convert to XYZ linear velocity
   velocity.twist.twist.linear.x = m.velE / 100.0;
   velocity.twist.twist.linear.y = m.velN / 100.0;
   velocity.twist.twist.linear.z = -m.velD / 100.0;
-
   const double stdSpeed = (m.sAcc / 100.0) * 3;
-
   const int cols = 6;
   velocity.twist.covariance[cols * 0 + 0] = stdSpeed * stdSpeed;
   velocity.twist.covariance[cols * 1 + 1] = stdSpeed * stdSpeed;
   velocity.twist.covariance[cols * 2 + 2] = stdSpeed * stdSpeed;
   velocity.twist.covariance[cols * 3 + 3] = -1;  //  angular rate unsupported
-
   velocityPublisher.publish(velocity);
   last_nav_vel = m;
 }
@@ -122,7 +141,6 @@ void publishNavPosLLH(const ublox_msgs::NavPOSLLH& m) {
   static ros::Publisher publisher =
       nh->advertise<ublox_msgs::NavPOSLLH>("navposllh", kROSQueueSize);
   publisher.publish(m);
-
   // Position message
   static ros::Publisher fixPublisher =
       nh->advertise<sensor_msgs::NavSatFix>("fix", kROSQueueSize);
@@ -158,6 +176,35 @@ void publishNavPosLLH(const ublox_msgs::NavPOSLLH& m) {
   //  update diagnostics
   freq_diag->tick(fix.header.stamp);
   updater->update();
+  // Publishing transform
+  publishNavPosTransform(m);
+}
+
+void publishNavPosTransform(const ublox_msgs::NavPOSLLH& m) {
+  static ros::Publisher transform_publisher = 
+              nh->advertise<geometry_msgs::TransformStamped>("fix_transform", kROSQueueSize);
+  // Timestamp
+  if (m.iTOW == last_nav_vel.iTOW){ fix_transform.header.stamp = velocity.header.stamp; }
+  else{ fix_transform.header.stamp = ros::Time::now(); }
+  // Header
+  fix_transform.header.frame_id = frame_id;
+  // Cartesian coordiantes
+  const double distance_latitude = 111.2998889 * 1000;
+  const double distance_longitude = 74.0642 * 1000;
+  // First measurement
+  if (sample_counter <= initializing_samples)
+  {
+    x_0 = distance_longitude * fix.longitude;
+    y_0 = distance_latitude * fix.latitude;
+    z_0 = fix.altitude;
+    sample_counter ++;
+  }
+  // Current measurement
+  fix_transform.transform.translation.x = distance_longitude * fix.longitude - x_0;
+  fix_transform.transform.translation.y = distance_latitude * fix.latitude - y_0;
+  fix_transform.transform.translation.z = fix.altitude - z_0;
+  // Publishing
+  if (sample_counter > initializing_samples){ transform_publisher.publish(fix_transform); }
 }
 
 void publishNavSVINFO(const ublox_msgs::NavSVINFO& m) {
@@ -307,6 +354,7 @@ int main(int argc, char** argv) {
   param_nh.param("fix_mode", fix_mode, std::string("both"));
   param_nh.param("dr_limit", dr_limit, 0);
   param_nh.param("ublox_version", ublox_version, 6);
+  param_nh.param("initializing_samples", initializing_samples, 50);
 
   if (enable_ppp) {
     ROS_WARN("Warning: PPP is enabled - this is an expert setting.");
@@ -417,11 +465,11 @@ int main(int argc, char** argv) {
       ss << "Failed to set measurement rate to " << meas_rate << "ms.";
       throw std::runtime_error(ss.str());
     }
-    if (!gps.enableSBAS(enable_sbas)) {
-      throw std::runtime_error(std::string("Failed to ") +
-                               ((enable_sbas) ? "enable" : "disable") +
-                               " SBAS.");
-    }
+    // if (!gps.enableSBAS(enable_sbas)) {
+    //   throw std::runtime_error(std::string("Failed to ") +
+    //                            ((enable_sbas) ? "enable" : "disable") +
+    //                            " SBAS.");
+    // }
     if (!gps.setPPPEnabled(enable_ppp)) {
       throw std::runtime_error(std::string("Failed to ") +
                                ((enable_ppp) ? "enable" : "disable") + " PPP.");

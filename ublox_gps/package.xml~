@@ -17,6 +17,5 @@
   <depend>roscpp</depend>
   <depend>roscpp_serialization</depend>
   <depend>diagnostic_updater</depend>
-  <depend>nav_msgs</depend>
 
 </package>

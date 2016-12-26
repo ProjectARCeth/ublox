@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
   ublox_msgs
   ublox_serialization
   diagnostic_updater
+  nav_msgs
 )
 
 catkin_package(

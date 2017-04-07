@@ -188,21 +188,21 @@ void publishNavPosTransform(const ublox_msgs::NavPOSLLH& m) {
   else{ fix_transform.header.stamp = ros::Time::now(); }
   // Header
   fix_transform.header.frame_id = frame_id;
-  // Cartesian coordiantes
-  const double distance_latitude = 111.2998889 * 1000;
-  const double distance_longitude = 74.0642 * 1000;
+  double a = 6378137;
+  double f = 1/298.257223563;
+  double radius = a / sqrt(1-f*(2-f)*pow(sin(fix.latitude),2));
   // First measurement
   if (sample_counter <= initializing_samples)
   {
-    x_0 = distance_longitude * fix.longitude;
-    y_0 = distance_latitude * fix.latitude;
-    z_0 = fix.altitude;
+    x_0 = (radius + fix.altitude)*cos(fix.latitude)*cos(fix.longitude);
+    y_0 = (radius + fix.altitude)*cos(fix.latitude)*sin(fix.longitude);
+    z_0 = (pow((1-f),2)*radius+fix.altitude)*sin(fix.latitude);
     sample_counter ++;
   }
   // Current measurement
-  fix_transform.transform.translation.x = distance_longitude * fix.longitude - x_0;
-  fix_transform.transform.translation.y = distance_latitude * fix.latitude - y_0;
-  fix_transform.transform.translation.z = fix.altitude - z_0;
+  fix_transform.transform.translation.x = (radius + fix.altitude)*cos(fix.latitude)*cos(fix.longitude) - x_0;
+  fix_transform.transform.translation.y = (radius + fix.altitude)*cos(fix.latitude)*sin(fix.longitude) - y_0;
+  fix_transform.transform.translation.z = (pow((1-f),2)*radius+fix.altitude)*sin(fix.latitude) - z_0;
   // Publishing
   if (sample_counter > initializing_samples){ transform_publisher.publish(fix_transform); }
 }

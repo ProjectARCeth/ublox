@@ -189,20 +189,22 @@ void publishNavPosTransform(const ublox_msgs::NavPOSLLH& m) {
   // Header
   fix_transform.header.frame_id = frame_id;
   double a = 6378137;
+  double b = 6356752.3142;
+  double eps = sqrt(a*a - b*b)/a;
   double f = 1/298.257223563;
-  double radius = a / sqrt(1-f*(2-f)*pow(sin(fix.latitude),2));
+  double radius = a / sqrt(1 - pow(eps*sin(fix.latitude),2));
   // First measurement
   if (sample_counter <= initializing_samples)
   {
     x_0 = (radius + fix.altitude)*cos(fix.latitude)*cos(fix.longitude);
     y_0 = (radius + fix.altitude)*cos(fix.latitude)*sin(fix.longitude);
-    z_0 = (pow((1-f),2)*radius+fix.altitude)*sin(fix.latitude);
+    z_0 = (radius*(1-eps*eps) + fix.altitude)*sin(fix.latitude);
     sample_counter ++;
   }
   // Current measurement
   fix_transform.transform.translation.x = (radius + fix.altitude)*cos(fix.latitude)*cos(fix.longitude) - x_0;
   fix_transform.transform.translation.y = (radius + fix.altitude)*cos(fix.latitude)*sin(fix.longitude) - y_0;
-  fix_transform.transform.translation.z = (pow((1-f),2)*radius+fix.altitude)*sin(fix.latitude) - z_0;
+  fix_transform.transform.translation.z = (radius*(1-eps*eps) + fix.altitude)*sin(fix.latitude) - z_0;
   // Publishing
   if (sample_counter > initializing_samples){ transform_publisher.publish(fix_transform); }
 }

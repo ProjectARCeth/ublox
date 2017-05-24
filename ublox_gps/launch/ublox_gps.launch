@@ -2,11 +2,11 @@
     <arg name="device" default="/dev/ttyACM0"/>
     <arg name="gps" default="gps"/>
     <arg name="frame_id" default="$(arg gps)"/>
-    <arg name="baudrate" default="57600"/>
+    <arg name="baudrate" default="9600"/>
     <arg name="output" default="screen"/>
 
     <!-- Read at 4Hz -->
-    <arg name="rate" default="20"/>
+    <arg name="rate" default="4"/>
 
     <!-- SBAS enabled -->
     <arg name="enable_sbas" default="true"/>
@@ -21,8 +21,8 @@
     <arg name="dr_limit" default="0"/>
 
     <!-- Manage use of GLONASS and BeiDou -->
-    <arg name="enable_beidou" default="false"/>
-    <arg name="enable_glonass" default="false"/>
+    <arg name="enable_beidou" default="true"/>
+    <arg name="enable_glonass" default="true"/>
 
     <!-- Manage use of PPP -->
     <arg name="enable_ppp" default="false"/>
